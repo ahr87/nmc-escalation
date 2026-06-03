@@ -85,6 +85,7 @@
             background: #ffffff;
             color: #3c4043;
             font-family: inherit;
+            box-sizing: border-box;
         }
 
         input:focus, select:focus, textarea:focus {
@@ -113,6 +114,15 @@
             transition: all 0.15s;
             font-weight: 500;
             width: 100%;
+            box-sizing: border-box;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
         }
 
         .btn-primary {
@@ -125,6 +135,12 @@
         .btn-primary:hover {
             background: #0c447c;
             box-shadow: 0 2px 8px rgba(24, 95, 165, 0.3);
+        }
+
+        .btn-primary:disabled {
+            background: #a0c4e8;
+            cursor: not-allowed;
+            opacity: 0.6;
         }
 
         .btn-sm {
@@ -188,6 +204,12 @@
             background: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
+        }
+
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
         }
 
         .alert-success {
@@ -717,6 +739,10 @@
                 <div class="login-subtitle">Incident Management System</div>
             </div>
 
+            <div id="credentialWarning" class="alert alert-warning" style="display: none;">
+                ⚠️ Supabase credentials not configured. Please check console for details.
+            </div>
+
             <div class="tab-toggle">
                 <button class="tab-btn active" onclick="switchLoginTab('login')">Sign In</button>
                 <button class="tab-btn" onclick="switchLoginTab('register')">Create Account</button>
@@ -733,7 +759,7 @@
                     <label>Password</label>
                     <input type="password" id="loginPassword" placeholder="Enter password">
                 </div>
-                <button class="btn btn-primary" onclick="handleLogin()">
+                <button class="btn btn-primary" id="signInBtn" onclick="handleLogin()">
                     <i class="ti ti-login"></i> Sign In
                 </button>
             </div>
@@ -772,7 +798,7 @@
                     <label>Confirm Password</label>
                     <input type="password" id="registerConfirm" placeholder="Confirm password">
                 </div>
-                <button class="btn btn-primary" onclick="handleRegister()">
+                <button class="btn btn-primary" id="createAcctBtn" onclick="handleRegister()">
                     <i class="ti ti-user-plus"></i> Create Account
                 </button>
             </div>
@@ -1013,19 +1039,6 @@
                     </div>
                 </div>
 
-                <!-- DETAIL MODAL CONTENT -->
-                <div id="page-incident-detail" class="page" style="overflow-y: auto;">
-                    <div class="card">
-                        <div class="card-header">
-                            <span class="card-title" id="detailTitle">Incident Details</span>
-                            <button class="btn btn-sm" onclick="goToPage('incidents', null)">
-                                <i class="ti ti-arrow-left"></i> Back
-                            </button>
-                        </div>
-                        <div class="card-body" id="detailBody"></div>
-                    </div>
-                </div>
-
                 <!-- MATRIX PAGE -->
                 <div id="page-matrix" class="page">
                     <div class="card">
@@ -1227,19 +1240,35 @@
     <script>
         // ===== SUPABASE CONFIG =====
         // 👇 REPLACE WITH YOUR SUPABASE CREDENTIALS
-       const SUPABASE_URL = 'https://oadahnwbfzeqtolljzrc.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9hZGFobndiZnplcXRvbGxqenJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0NzQ5ODIsImV4cCI6MjA5NjA1MDk4Mn0.d7p-HuMzg1c0bNePG7HfOw5rST4IdTFoyjVqsEIfYi4';
+        const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
+        const SUPABASE_KEY = 'YOUR_ANON_PUBLIC_KEY';
         let supabase = null;
+        let credentialsConfigured = false;
 
-        // Initialize Supabase only if credentials are provided
+        // Initialize Supabase
         function initSupabase() {
-            if (SUPABASE_URL.includes('YOUR_PROJECT_ID') || SUPABASE_KEY.includes('YOUR_ANON')) {
-                console.error('⚠️  Supabase credentials not configured. Please update SUPABASE_URL and SUPABASE_KEY.');
-                alert('❌ Configuration Error:\n\nPlease add your Supabase credentials:\n1. Replace SUPABASE_URL with your actual URL\n2. Replace SUPABASE_KEY with your anon public key\n\nGet these from: Settings > API in your Supabase dashboard');
+            const urlValid = !SUPABASE_URL.includes('YOUR_PROJECT_ID') && SUPABASE_URL.startsWith('https://');
+            const keyValid = !SUPABASE_KEY.includes('YOUR_ANON') && SUPABASE_KEY.length > 10;
+
+            if (!urlValid || !keyValid) {
+                console.warn('⚠️ Supabase credentials not configured properly');
+                console.log('SUPABASE_URL:', urlValid ? '✓ Set' : '✗ Not set');
+                console.log('SUPABASE_KEY:', keyValid ? '✓ Set' : '✗ Not set');
+                document.getElementById('credentialWarning').style.display = 'block';
+                credentialsConfigured = false;
                 return false;
             }
-            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-            return true;
+
+            try {
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                credentialsConfigured = true;
+                console.log('✅ Supabase initialized successfully');
+                return true;
+            } catch (error) {
+                console.error('Error initializing Supabase:', error);
+                credentialsConfigured = false;
+                return false;
+            }
         }
 
         // ===== STATE =====
@@ -1255,19 +1284,23 @@
 
         // ===== INITIALIZATION =====
         async function init() {
-            if (!initSupabase()) return;
+            initSupabase();
 
-            try {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    currentUser = user;
-                    showAppPage();
-                    await loadAllData();
-                } else {
+            if (credentialsConfigured && supabase) {
+                try {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (user) {
+                        currentUser = user;
+                        showAppPage();
+                        await loadAllData();
+                    } else {
+                        showLoginPage();
+                    }
+                } catch (error) {
+                    console.error('Init error:', error);
                     showLoginPage();
                 }
-            } catch (error) {
-                console.error('Init error:', error);
+            } else {
                 showLoginPage();
             }
         }
@@ -1292,6 +1325,11 @@
         }
 
         async function handleLogin() {
+            if (!credentialsConfigured) {
+                showError('loginError', '❌ Please configure Supabase credentials first');
+                return;
+            }
+
             const email = document.getElementById('loginEmail').value.trim();
             const password = document.getElementById('loginPassword').value;
 
@@ -1299,6 +1337,8 @@
                 showError('loginError', 'Please fill in all fields');
                 return;
             }
+
+            document.getElementById('signInBtn').disabled = true;
 
             try {
                 const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -1310,10 +1350,17 @@
                 renderDashboard();
             } catch (error) {
                 showError('loginError', error.message);
+            } finally {
+                document.getElementById('signInBtn').disabled = false;
             }
         }
 
         async function handleRegister() {
+            if (!credentialsConfigured) {
+                showError('registerError', '❌ Please configure Supabase credentials first');
+                return;
+            }
+
             const name = document.getElementById('registerName').value.trim();
             const email = document.getElementById('registerEmail').value.trim();
             const dept = document.getElementById('registerDept').value;
@@ -1336,6 +1383,8 @@
                 return;
             }
 
+            document.getElementById('createAcctBtn').disabled = true;
+
             try {
                 const { data, error } = await supabase.auth.signUp({
                     email,
@@ -1355,20 +1404,25 @@
                 setTimeout(() => switchLoginTab('login'), 2000);
             } catch (error) {
                 showError('registerError', error.message);
+            } finally {
+                document.getElementById('createAcctBtn').disabled = false;
             }
         }
 
         async function handleLogout() {
             if (!confirm('Are you sure you want to logout?')) return;
-            await supabase.auth.signOut();
+            if (credentialsConfigured && supabase) {
+                await supabase.auth.signOut();
+            }
             currentUser = null;
             showLoginPage();
         }
 
         // ===== DATA LOADING =====
         async function loadAllData() {
+            if (!credentialsConfigured || !supabase) return;
+
             try {
-                // Load all data from Supabase
                 const [incidents, contacts, matrix, departments, regions, problemTypes] = await Promise.all([
                     supabase.from('incidents').select('*'),
                     supabase.from('contacts').select('*'),
@@ -1384,7 +1438,6 @@
                 currentData.regions = regions.data || [];
                 currentData.problemTypes = problemTypes.data || [];
 
-                // Organize matrix by department
                 const matrixData = matrix.data || [];
                 currentData.matrix = {};
                 matrixData.forEach(item => {
@@ -1593,13 +1646,13 @@
             document.getElementById('escalateBtn').style.display = inc.status === 'Closed' || inc.current_level >= 5 ? 'none' : '';
             document.getElementById('closeIncidentBtn').style.display = inc.status === 'Closed' ? 'none' : '';
 
-            // Store current viewing incident
             window.currentViewingIncident = inc;
 
             openModal('detailModal');
         }
 
         async function escalateIncident() {
+            if (!credentialsConfigured) return;
             const inc = window.currentViewingIncident;
             if (!inc || inc.current_level >= 5 || inc.status === 'Closed') return;
 
@@ -1628,6 +1681,7 @@
         }
 
         async function closeIncident() {
+            if (!credentialsConfigured) return;
             const inc = window.currentViewingIncident;
             if (!inc) return;
 
@@ -1704,6 +1758,7 @@
         }
 
         async function saveNewIncident() {
+            if (!credentialsConfigured) return;
             const dept = document.getElementById('newDept').value;
             const device = document.getElementById('newDevice').value.trim();
             const ticket = document.getElementById('newTicket').value.trim();
@@ -1805,6 +1860,7 @@
         }
 
         async function saveDept() {
+            if (!credentialsConfigured) return;
             const name = document.getElementById('deptName').value.trim();
             if (!name) {
                 showNotification('⚠️ Please enter department name', 'error');
@@ -1812,7 +1868,6 @@
             }
 
             try {
-                // Insert department
                 const { data: deptData, error: deptError } = await supabase
                     .from('departments')
                     .insert([{ name: name }])
@@ -1820,7 +1875,6 @@
 
                 if (deptError) throw deptError;
 
-                // Insert escalation levels
                 const levelInserts = [1, 2, 3, 4, 5].map(l => ({
                     department: name,
                     level: l,
@@ -1869,6 +1923,7 @@
         }
 
         async function saveContact() {
+            if (!credentialsConfigured) return;
             const name = document.getElementById('contactName').value.trim();
             const phone = document.getElementById('contactPhone').value.trim();
             const email = document.getElementById('contactEmail').value.trim();
@@ -1897,6 +1952,7 @@
 
         async function deleteContact(id) {
             if (!confirm('Delete this contact?')) return;
+            if (!credentialsConfigured) return;
             try {
                 const { error } = await supabase.from('contacts').delete().eq('id', id);
                 if (error) throw error;
@@ -1937,6 +1993,7 @@
         }
 
         async function saveProblemType() {
+            if (!credentialsConfigured) return;
             const name = document.getElementById('problemTypeName').value.trim();
             const desc = document.getElementById('problemTypeDesc').value.trim();
 
@@ -1963,6 +2020,7 @@
 
         async function deleteProblemType(id) {
             if (!confirm('Delete this problem type?')) return;
+            if (!credentialsConfigured) return;
             try {
                 const { error } = await supabase.from('problem_types').delete().eq('id', id);
                 if (error) throw error;
@@ -1978,7 +2036,6 @@
         function exportToExcel() {
             const wb = XLSX.utils.book_new();
 
-            // Incidents sheet
             const incidentsData = currentData.incidents.map(i => ({
                 'Ticket': i.ticket_number,
                 'Device': i.device_name,
@@ -1996,7 +2053,6 @@
 
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(incidentsData), 'Incidents');
 
-            // Contacts sheet
             const contactsData = currentData.contacts.map(c => ({
                 'Name': c.name,
                 'Phone': c.phone,
@@ -2006,7 +2062,6 @@
 
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(contactsData), 'Contacts');
 
-            // Write file
             XLSX.writeFile(wb, 'NMC-Escalation-Report-' + new Date().toISOString().split('T')[0] + '.xlsx');
             showNotification('✅ Export complete!');
         }
